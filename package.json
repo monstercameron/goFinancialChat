@@ -4,8 +4,10 @@
   "description": "Guide chat through your finances",
   "main": "index.js",
   "scripts": {
-    "templ": "cd features/chat && templ generate",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "setup": "bash ./shell/templeGenerateOnStart.sh",
+    "tailwinds": "npx tailwindcss -i ./static/style/in.css -o ./static/style/out.css --watch",
+    "dev": "nodemon -e go --signal SIGTERM --exec go run .",
+    "templ": "nodemon --verbose --watch 'features/**/*.templ' -e templ --exec 'bash ./scripts/templgenerate.sh'"
   },
   "author": "",
   "license": "ISC",
