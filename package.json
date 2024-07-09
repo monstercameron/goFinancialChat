@@ -4,6 +4,7 @@
   "description": "Guide chat through your finances",
   "main": "index.js",
   "scripts": {
+    "templ": "cd features/chat && templ generate",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
