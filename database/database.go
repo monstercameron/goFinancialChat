@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	dbPath = "./database.db"
+	dbPath = "./database/database.db"
 )
 
 var db *sql.DB
