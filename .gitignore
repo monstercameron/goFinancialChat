@@ -1,0 +1,4 @@
+/node_modules
+*_templ.go
+package-lock.json
+.DS_Store
