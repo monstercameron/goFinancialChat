@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"goFinancialChat/utils"
+	"goFinancialChat/database"
 	"encoding/json"
 )
 
@@ -13,30 +14,24 @@ func init() {
 
 // ServeChatPage handles GET requests to serve the chat page
 func ServeChatPage(w http.ResponseWriter, r *http.Request) {
-	ChatPage().Render(r.Context(), w)
-}
-
-// Original HandleChat (commented out for reference)
-/*
-// HandleChat handles POST requests for chat messages
-func HandleChat(w http.ResponseWriter, r *http.Request) {
-	message := r.FormValue("message")
-	
-	// Generate AI response
-	aiResponse, err := utils.GenerateAIResponse(message)
+	// Retrieve last 5 conversations from the database
+	conversations, err := database.GetConversations()
 	if err != nil {
-		fmt.Printf("Error generating AI response: %v\n", err)
-		http.Error(w, "Error generating response", http.StatusInternalServerError)
+		fmt.Printf("Error retrieving conversations: %v\n", err)
+		http.Error(w, "Error loading chat history", http.StatusInternalServerError)
 		return
 	}
 
-	// Render chat bubbles
-	ChatBubble(message, true).Render(r.Context(), w)
-	ChatBubble(aiResponse, false).Render(r.Context(), w)
-}
-*/
+	// Limit to last 5 conversations
+	if len(conversations) > 5 {
+		conversations = conversations[:5]
+	}
 
-// NewHandleChat handles POST requests for chat messages and tests IsAffirmativeResponse
+	// Render the chat page with history
+	ChatPageWithHistory(conversations).Render(r.Context(), w)
+}
+
+// HandleChat handles POST requests for chat messages and uses the database
 func NewHandleChat(w http.ResponseWriter, r *http.Request) {
 	message := r.FormValue("message")
 	
@@ -60,9 +55,15 @@ func NewHandleChat(w http.ResponseWriter, r *http.Request) {
 	jsonResponse, _ := json.MarshalIndent(affirmativeResponse, "", "  ")
 	aiResponse += fmt.Sprintf("\n\nDebug Info:\nRaw JSON response:\n%s", string(jsonResponse))
 
+	// Save the conversation to the database
+	err = database.SaveConversation(message, aiResponse)
+	if err != nil {
+		fmt.Printf("Error saving conversation: %v\n", err)
+		// Note: We're not returning an error to the user here, but you might want to handle this differently
+	}
+
 	// Render chat bubbles
-	ChatBubble(message, true).Render(r.Context(), w)
-	ChatBubble(aiResponse, false).Render(r.Context(), w)
+	ChatBubbles(message, aiResponse).Render(r.Context(), w)
 }
 
 // Ternary is a helper function to mimic the ternary operator
