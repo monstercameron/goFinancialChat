@@ -7,6 +7,7 @@ import (
 	"os"
 
 	_ "github.com/mattn/go-sqlite3"
+	"goFinancialChat/utils"
 )
 
 const (
@@ -39,12 +40,14 @@ func init() {
 
 	fmt.Println("Successfully connected to the database.")
 
-	// Sanity check 3: Check if the required table exists
-	if !tableExists("conversations") {
-		fmt.Println("Conversations table does not exist. Creating it.")
-		if err := createConversationsTable(); err != nil {
-			log.Fatalf("Failed to create conversations table: %v", err)
-		}
+	// Sanity check 3: Create required tables
+	if err := createTables(); err != nil {
+		log.Fatalf("Failed to create tables: %v", err)
+	}
+
+	// Create a test user
+	if err := createTestUser(); err != nil {
+		log.Fatalf("Failed to create test user: %v", err)
 	}
 
 	fmt.Println("Database initialization completed successfully.")
@@ -64,33 +67,58 @@ func createDatabaseFile() error {
 	return nil
 }
 
-func tableExists(tableName string) bool {
-	query := `SELECT name FROM sqlite_master WHERE type='table' AND name=?;`
-	var name string
-	err := db.QueryRow(query, tableName).Scan(&name)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return false
-		}
-		log.Printf("Error checking if table exists: %v", err)
-		return false
-	}
-	return true
-}
-
-func createConversationsTable() error {
-	_, err := db.Exec(`
-		CREATE TABLE IF NOT EXISTS conversations (
+func createTables() error {
+	queries := []string{
+		`CREATE TABLE IF NOT EXISTS users (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			email TEXT UNIQUE,
+			username TEXT,
+			passphrase TEXT
+		)`,
+		`CREATE TABLE IF NOT EXISTS conversations (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER,
 			user_message TEXT,
 			ai_response TEXT,
-			timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-		)
-	`)
-	if err != nil {
-		return fmt.Errorf("error creating conversations table: %v", err)
+			timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (user_id) REFERENCES users(id)
+		)`,
 	}
+
+	for _, query := range queries {
+		_, err := db.Exec(query)
+		if err != nil {
+			return fmt.Errorf("error creating table: %v", err)
+		}
+	}
+
 	return nil
+}
+
+func createTestUser() error {
+	user, err := utils.CreateUser("test@gmail.com", "TestUser", "verylongpassword")
+	if err != nil {
+		return fmt.Errorf("failed to create test user: %v", err)
+	}
+
+	_, err = db.Exec("INSERT OR IGNORE INTO users (email, username, passphrase) VALUES (?, ?, ?)",
+		user.Email, user.Username, user.Passphrase)
+	if err != nil {
+		return fmt.Errorf("failed to insert test user: %v", err)
+	}
+
+	fmt.Println("Test user created or already exists.")
+	return nil
+}
+
+func GetUserByEmail(email string) (*utils.User, error) {
+	var user utils.User
+	err := db.QueryRow("SELECT id, email, username, passphrase FROM users WHERE email = ?", email).
+		Scan(&user.ID, &user.Email, &user.Username, &user.Passphrase)
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
 }
 
 // GetDB returns the database connection
@@ -107,8 +135,9 @@ func CloseDB() error {
 }
 
 // SaveConversation saves a conversation to the database
-func SaveConversation(userMessage, aiResponse string) error {
-	_, err := db.Exec("INSERT INTO conversations (user_message, ai_response) VALUES (?, ?)", userMessage, aiResponse)
+func SaveConversation(userID int, userMessage, aiResponse string) error {
+	_, err := db.Exec("INSERT INTO conversations (user_id, user_message, ai_response) VALUES (?, ?, ?)",
+		userID, userMessage, aiResponse)
 	if err != nil {
 		return fmt.Errorf("error saving conversation: %v", err)
 	}
@@ -116,8 +145,8 @@ func SaveConversation(userMessage, aiResponse string) error {
 }
 
 // GetConversations retrieves all conversations from the database
-func GetConversations() ([]Conversation, error) {
-	rows, err := db.Query("SELECT id, user_message, ai_response, timestamp FROM conversations ORDER BY timestamp DESC")
+func GetConversations(userID int) ([]Conversation, error) {
+	rows, err := db.Query("SELECT id, user_message, ai_response, timestamp FROM conversations WHERE user_id = ? ORDER BY timestamp DESC", userID)
 	if err != nil {
 		return nil, fmt.Errorf("error querying conversations: %v", err)
 	}
@@ -136,7 +165,6 @@ func GetConversations() ([]Conversation, error) {
 	return conversations, nil
 }
 
-// Conversation represents a single conversation entry
 type Conversation struct {
 	ID           int
 	UserMessage  string
